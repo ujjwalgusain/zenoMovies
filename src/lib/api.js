@@ -1,9 +1,9 @@
-export const OMDB_KEY = import.meta.env.VITE_OMDB_KEY || 'f07d8c6a'
 export const TMDB_KEY = import.meta.env.VITE_TMDB_KEY || '4e3e9b1a858447c06f5732d2064c5e98'
 export const EMBED_API_KEY = import.meta.env.VITE_EMBED_API_KEY || 'nx_b0dcca19f625fe98a5712de62cfaa135'
 export const EMBED_BASE = 'https://api.codespecters.com'
-const OMDB_BASE = 'https://www.omdbapi.com/'
+
 const TMDB_BASE = 'https://api.themoviedb.org/3'
+const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500'
 
 export const movieQuickSearches = ['Dune', 'Oppenheimer', 'John Wick', 'Interstellar']
 export const seriesQuickSearches = ['Severance', 'The Bear', 'Dark', 'Stranger Things']
@@ -20,9 +20,9 @@ const seriesCollections = [
   { title: 'Sci-Fi Escapes', description: 'Smart worlds, strange tech, and cliffhanger energy.', queries: ['Andor', 'Foundation', 'Black Mirror', 'The Expanse'] },
 ]
 
-async function omdbFetch(params) {
-  const url = new URL(OMDB_BASE)
-  url.searchParams.set('apikey', OMDB_KEY)
+async function tmdbFetch(path, params = {}) {
+  const url = new URL(`${TMDB_BASE}${path}`)
+  url.searchParams.set('api_key', TMDB_KEY)
 
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {
@@ -31,69 +31,47 @@ async function omdbFetch(params) {
   })
 
   const res = await fetch(url.toString())
-  if (!res.ok) throw new Error(`OMDb error: ${res.status}`)
-  const data = await res.json()
-  if (data.Response === 'False') throw new Error(data.Error || 'OMDb request failed')
-  return data
-}
-
-async function tmdbFetch(path) {
-  const res = await fetch(`${TMDB_BASE}${path}`)
   if (!res.ok) throw new Error(`TMDb error: ${res.status}`)
   return res.json()
 }
 
-async function resolveTmdbId(imdbId, type) {
-  if (!imdbId) return null
-
-  try {
-    const data = await tmdbFetch(`/find/${imdbId}?api_key=${TMDB_KEY}&external_source=imdb_id`)
-    if (type === 'series') {
-      return data.tv_results?.[0]?.id ?? null
-    }
-    return data.movie_results?.[0]?.id ?? null
-  } catch {
-    return null
-  }
-}
-
-async function normalizeTitle(data) {
-  const itemType = data.Type === 'series' ? 'series' : 'movie'
-  const tmdbId = await resolveTmdbId(data.imdbID, itemType)
-
+function normalizeMovie(data) {
   return {
-    id: data.imdbID,
-    streamId: tmdbId,
-    title: data.Title,
-    year: getYear(data.Year),
-    rating: formatRating(data.imdbRating),
-    poster: posterUrl(data.Poster),
-    plot: data.Plot && data.Plot !== 'N/A' ? data.Plot : '',
-    genre: data.Genre && data.Genre !== 'N/A' ? data.Genre : '',
-    runtime: data.Runtime && data.Runtime !== 'N/A' ? data.Runtime : '',
-    totalSeasons: data.totalSeasons ? Number(data.totalSeasons) : null,
-    type: itemType,
+    id: `movie-${data.id}`,
+    streamId: data.id,
+    title: data.title || '',
+    year: getYear(data.release_date),
+    rating: formatRating(data.vote_average),
+    poster: posterUrl(data.poster_path),
+    plot: data.overview || '',
+    genre: formatGenres(data.genres || data.genre_ids),
+    runtime: formatRuntime(data.runtime),
+    totalSeasons: null,
+    type: 'movie',
   }
 }
 
-async function hydrateSearchItems(items) {
-  const hydrated = await Promise.all(
-    items.map(async (item) => {
-      try {
-        const full = await omdbFetch({ i: item.imdbID, plot: 'short' })
-        return normalizeTitle(full)
-      } catch {
-        return normalizeTitle(item)
-      }
-    }),
-  )
-
-  return hydrated.filter(Boolean)
+function normalizeSeries(data) {
+  return {
+    id: `series-${data.id}`,
+    streamId: data.id,
+    title: data.name || '',
+    year: getYear(data.first_air_date),
+    rating: formatRating(data.vote_average),
+    poster: posterUrl(data.poster_path),
+    plot: data.overview || '',
+    genre: formatGenres(data.genres || data.genre_ids),
+    runtime: formatEpisodeRuntime(data.episode_run_time),
+    totalSeasons: data.number_of_seasons ?? null,
+    type: 'series',
+  }
 }
 
 async function searchTitles(query, type) {
-  const data = await omdbFetch({ s: query, type, page: 1 })
-  return hydrateSearchItems(data.Search || [])
+  const endpoint = type === 'series' ? '/search/tv' : '/search/movie'
+  const data = await tmdbFetch(endpoint, { query, page: 1, include_adult: false })
+  const items = data.results || []
+  return items.map((item) => (type === 'series' ? normalizeSeries(item) : normalizeMovie(item)))
 }
 
 async function loadCuratedSections(definitions, type) {
@@ -126,16 +104,17 @@ export const api = {
   searchTV: (query) => searchTitles(query, 'series'),
   curatedMovies: () => loadCuratedSections(movieCollections, 'movie'),
   curatedTV: () => loadCuratedSections(seriesCollections, 'series'),
-  movieDetails: async (id) => normalizeTitle(await omdbFetch({ i: id, plot: 'full' })),
-  tvDetails: async (id) => normalizeTitle(await omdbFetch({ i: id, plot: 'full' })),
+  movieDetails: async (id) => normalizeMovie(await tmdbFetch(`/movie/${stripPrefix(id)}`)),
+  tvDetails: async (id) => normalizeSeries(await tmdbFetch(`/tv/${stripPrefix(id)}`)),
   seasonDetails: async (id, season) => {
-    const data = await omdbFetch({ i: id, Season: season })
-    return (data.Episodes || []).map((episode) => ({
-      id: `${id}-s${season}-e${episode.Episode}`,
-      number: Number(episode.Episode),
-      title: episode.Title,
-      released: episode.Released !== 'N/A' ? episode.Released : '',
-      rating: formatRating(episode.imdbRating),
+    const seriesId = stripPrefix(id)
+    const data = await tmdbFetch(`/tv/${seriesId}/season/${season}`)
+    return (data.episodes || []).map((episode) => ({
+      id: `series-${seriesId}-s${season}-e${episode.episode_number}`,
+      number: Number(episode.episode_number),
+      title: episode.name || `Episode ${episode.episode_number}`,
+      released: episode.air_date || '',
+      rating: formatRating(episode.vote_average),
     }))
   },
 }
@@ -148,18 +127,75 @@ export function tvEmbedUrl(id, season, episode) {
   return `${EMBED_BASE}/embed/tv/${id}/${season}/${episode}?apikey=${EMBED_API_KEY}`
 }
 
-export function posterUrl(url) {
-  return url && url !== 'N/A' ? url : null
+function stripPrefix(id) {
+  return String(id).replace(/^(movie|series)-/, '')
+}
+
+export function posterUrl(path) {
+  return path ? `${TMDB_IMAGE_BASE}${path}` : null
+}
+
+function formatGenres(genres) {
+  if (!genres) return ''
+  if (Array.isArray(genres) && genres.length && typeof genres[0] === 'object') {
+    return genres.map((genre) => genre.name).filter(Boolean).join(', ')
+  }
+  if (Array.isArray(genres)) {
+    return genres
+      .map((genreId) => GENRE_LOOKUP[genreId])
+      .filter(Boolean)
+      .join(', ')
+  }
+  return ''
+}
+
+function formatRuntime(runtime) {
+  if (!runtime) return ''
+  return `${runtime} min`
+}
+
+function formatEpisodeRuntime(runtimeList) {
+  const runtime = Array.isArray(runtimeList) ? runtimeList[0] : runtimeList
+  return runtime ? `${runtime} min` : ''
 }
 
 export function formatRating(rating) {
-  if (!rating || rating === 'N/A') return null
   const parsed = Number.parseFloat(rating)
-  return Number.isFinite(parsed) ? parsed.toFixed(1) : null
+  return Number.isFinite(parsed) && parsed > 0 ? parsed.toFixed(1) : null
 }
 
 export function getYear(value) {
   if (!value) return ''
   const match = String(value).match(/\d{4}/)
   return match ? match[0] : ''
+}
+
+const GENRE_LOOKUP = {
+  12: 'Adventure',
+  14: 'Fantasy',
+  16: 'Animation',
+  18: 'Drama',
+  27: 'Horror',
+  28: 'Action',
+  35: 'Comedy',
+  36: 'History',
+  37: 'Western',
+  53: 'Thriller',
+  80: 'Crime',
+  878: 'Science Fiction',
+  9648: 'Mystery',
+  99: 'Documentary',
+  10402: 'Music',
+  10749: 'Romance',
+  10751: 'Family',
+  10752: 'War',
+  10759: 'Action & Adventure',
+  10762: 'Kids',
+  10763: 'News',
+  10764: 'Reality',
+  10765: 'Sci-Fi & Fantasy',
+  10766: 'Soap',
+  10767: 'Talk',
+  10768: 'War & Politics',
+  10770: 'TV Movie',
 }

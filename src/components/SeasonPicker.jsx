@@ -99,13 +99,13 @@ export default function SeasonPicker({ show, onPlay }) {
               <strong className={styles.episodeTitle}>{episode.title}</strong>
               <span className={styles.episodeMeta}>
                 {episode.rating ? `IMDb ${episode.rating}` : 'Ready to stream'}
-                {episode.released ? ` • ${episode.released}` : ''}
+                {episode.released ? ` | ${episode.released}` : ''}
               </span>
             </button>
           ))}
         </div>
       ) : (
-        <p className={styles.empty}>OMDb did not return episode data for this season.</p>
+        <p className={styles.empty}>TMDb did not return episode data for this season.</p>
       )}
     </section>
   )
