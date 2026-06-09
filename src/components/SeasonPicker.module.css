@@ -1,0 +1,109 @@
+.wrap {
+  margin: 0 0 2rem;
+  padding: 1.35rem;
+  border-radius: 1.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.78rem;
+  color: var(--accent-soft);
+}
+
+.showName {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.showYear {
+  color: var(--text-muted);
+}
+
+.seasonTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.seasonTab {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+}
+
+.active {
+  color: #08111f;
+  background: linear-gradient(135deg, #f8c86a, #ff8f5a);
+  border-color: transparent;
+}
+
+.episodeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.episodeCard,
+.skeleton {
+  min-height: 8.5rem;
+  border-radius: 1.2rem;
+}
+
+.episodeCard {
+  display: grid;
+  gap: 0.55rem;
+  align-content: start;
+  padding: 1rem;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+}
+
+.episodeCard:hover {
+  border-color: rgba(255, 143, 90, 0.45);
+}
+
+.episodeNumber,
+.episodeMeta {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.episodeTitle {
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.skeleton {
+  background:
+    linear-gradient(130deg, rgba(255,255,255,0.04), rgba(255,255,255,0.1), rgba(255,255,255,0.04));
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.empty {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
